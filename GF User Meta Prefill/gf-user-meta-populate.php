@@ -10,10 +10,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-add_filter( 'gform_pre_render_2', 'gfump_prefill_user_meta' );
-add_filter( 'gform_pre_validation_2', 'gfump_prefill_user_meta' );
-add_filter( 'gform_admin_pre_render_2', 'gfump_prefill_user_meta' );
-add_filter( 'gform_pre_submission_filter_2', 'gfump_prefill_user_meta' );
+add_filter( 'gform_pre_render', 'gfump_prefill_user_meta' );
+add_filter( 'gform_pre_validation', 'gfump_prefill_user_meta' );
+add_filter( 'gform_admin_pre_render', 'gfump_prefill_user_meta' );
+add_filter( 'gform_pre_submission_filter', 'gfump_prefill_user_meta' );
 function gfump_prefill_user_meta( $form ) {
 	if ( ! is_user_logged_in() ) {
 		return $form;
