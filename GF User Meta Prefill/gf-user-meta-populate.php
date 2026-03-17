@@ -132,16 +132,39 @@ function gfump_prefill_user_meta( $form ) {
 	return $form;
 }
 // Shortcode to display either the registration or update form based on login status
-add_shortcode( 'user_account_form', 'gfump_user_account_form_shortcode' );
-function gfump_user_account_form_shortcode() {
+add_shortcode( 'user_account_form', 'gfump_user_account_form_shortcode' ); 
+function gfump_user_account_form_shortcode() { 
+	$register_form_id = 2; 
+	$update_form_id = 3; 
+	
+	if ( is_user_logged_in() ) {
+		 return do_shortcode( '[gravityform id="' . $update_form_id . '" title="true" ajax="true"]' ); 
+	} 
+	return do_shortcode( '[gravityform id="' . $register_form_id . '" title="true" ajax="true"]' ); 
+}
+// Shortcode to display either the registration or update form based on login status
+add_shortcode( 'user_popup_form', 'gfump_user_popup_form_shortcode' );
+function gfump_user_popup_form_shortcode( $atts ) {
+
 	$register_form_id = 2;
-	$update_form_id   = 3;
+
+	// Only allow update_form_id to be passed in
+	$atts = shortcode_atts(
+		array(
+			'update_form_id' => 3, // default fallback
+		),
+		$atts,
+		'user_popup_form'
+	);
+
+	$update_form_id = intval( $atts['update_form_id'] );
 
 	if ( is_user_logged_in() ) {
 		return do_shortcode( '[gravityform id="' . $update_form_id . '" title="true" ajax="true"]' );
 	}
-
-	return do_shortcode( '[gravityform id="' . $register_form_id . '" title="true" ajax="true"]' );
+	else{
+		return '<h2 style="text-align: center;">Please login to your account to register for this webinar. If you do not have an account, please <a href="https://complianceweek.newspackstaging.com/newsletter-registration/" style="text-decoration: underline;">register here</a>.</h2>';
+	}
 }
 
 // Optional: Filter to show/hide menu items based on login status and content access
