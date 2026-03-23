@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GF User Meta Prefill
  * Description: Prefills Gravity Forms fields from WordPress user meta for logged-in users.
- * Version: 1.0.2
+ * Version: 1.1.6
  * Author: Verdian Insights
  */
 
@@ -14,6 +14,7 @@ add_filter( 'gform_pre_render', 'gfump_prefill_user_meta' );
 add_filter( 'gform_pre_validation', 'gfump_prefill_user_meta' );
 add_filter( 'gform_admin_pre_render', 'gfump_prefill_user_meta' );
 add_filter( 'gform_pre_submission_filter', 'gfump_prefill_user_meta' );
+
 function gfump_prefill_user_meta( $form ) {
 	if ( ! is_user_logged_in() ) {
 		return $form;
@@ -179,9 +180,9 @@ function custom_login_menu_filter( $items, $args ) {
 
 	$has_content_access = false;
 
-	if ( $is_logged_in && function_exists( 'wc_memberships_is_user_active_member' ) ) {
-		$has_content_access = wc_memberships_is_user_active_member( $user_id, 'content-access' );
-	}
+	// if ( $is_logged_in && function_exists( 'wc_memberships_is_user_active_member' ) ) {
+	// 	$has_content_access = wc_memberships_is_user_active_member( $user_id, 'content-access' );
+	// }
 
 	foreach ( $items as $key => $item ) {
 		$classes = isset( $item->classes ) ? (array) $item->classes : array();
@@ -205,11 +206,19 @@ function custom_login_menu_filter( $items, $args ) {
 	return $items;
 }
 
-add_action( 'gform_after_submission_1', 'gf_add_membership_purchase_from_form_1', 10, 2 );
+/**
+ * After user registration via GF, create a WooCommerce order for a specific product to grant membership access.
+ */
 
-function gf_add_membership_purchase_from_form_1( $entry, $form ) {
+add_action( 'gform_user_registered', 'gf_add_membership_purchase_after_user_registered', 10, 4 );
 
-	// Prevent duplicate processing for the same entry.
+function gf_add_membership_purchase_after_user_registered( $user_id, $feed, $entry, $user_pass ) {
+
+	// Only run for your form ID 2
+	if ( (int) rgar( $entry, 'form_id' ) !== 2 ) {
+		return;
+	}
+
 	$existing_order_id = gform_get_meta( rgar( $entry, 'id' ), 'wc_membership_order_id' );
 	if ( $existing_order_id ) {
 		return;
@@ -218,39 +227,11 @@ function gf_add_membership_purchase_from_form_1( $entry, $form ) {
 	$product_id = 86966;
 	$product    = wc_get_product( $product_id );
 
-	if ( ! $product ) {
-		error_log( 'GF Membership Purchase: Product 86966 not found.' );
-		return;
-	}
-
-	$email = sanitize_email( rgar( $entry, '1' ) );
-	$phone = sanitize_text_field( rgar( $entry, '9' ) );
-	$company = sanitize_text_field( rgar( $entry, '5' ) );
+	$email     = sanitize_email( rgar( $entry, '1' ) );
+	$phone     = sanitize_text_field( rgar( $entry, '9' ) );
+	$company   = sanitize_text_field( rgar( $entry, '5' ) );
 	$job_title = sanitize_text_field( rgar( $entry, '6' ) );
 
-	if ( empty( $email ) || ! is_email( $email ) ) {
-		error_log( 'GF Membership Purchase: Invalid email on entry #' . rgar( $entry, 'id' ) );
-		return;
-	}
-
-	// User is already created elsewhere. Find them by email.
-	$user = get_user_by( 'email', $email );
-
-	if ( ! $user ) {
-		error_log( 'GF Membership Purchase: No WP user found for ' . $email );
-		return;
-	}
-
-	$customer_id = $user->ID;
-
-	// Optional: stop if user already has this membership.
-	if ( function_exists( 'wc_memberships_is_user_active_member' ) ) {
-		if ( wc_memberships_is_user_active_member( $customer_id ) ) {
-			return;
-		}
-	}
-
-	// Name field.
 	$first_name = sanitize_text_field( rgar( $entry, '2.3' ) );
 	$last_name  = sanitize_text_field( rgar( $entry, '2.6' ) );
 
@@ -258,12 +239,11 @@ function gf_add_membership_purchase_from_form_1( $entry, $form ) {
 		$full_name = sanitize_text_field( rgar( $entry, '2' ) );
 		if ( ! empty( $full_name ) ) {
 			$parts = preg_split( '/\s+/', trim( $full_name ), 2 );
-			$first_name = isset( $parts[0] ) ? $parts[0] : '';
-			$last_name  = isset( $parts[1] ) ? $parts[1] : '';
+			$first_name = $parts[0] ?? '';
+			$last_name  = $parts[1] ?? '';
 		}
 	}
 
-	// Address field.
 	$address_1 = sanitize_text_field( rgar( $entry, '7.1' ) );
 	$address_2 = sanitize_text_field( rgar( $entry, '7.2' ) );
 	$city      = sanitize_text_field( rgar( $entry, '7.3' ) );
@@ -276,16 +256,9 @@ function gf_add_membership_purchase_from_form_1( $entry, $form ) {
 	}
 
 	try {
-		$order = wc_create_order(
-			array(
-				'customer_id' => $customer_id,
-			)
-		);
-
-		if ( is_wp_error( $order ) ) {
-			error_log( 'GF Membership Purchase: Order creation failed - ' . $order->get_error_message() );
-			return;
-		}
+		$order = wc_create_order( array(
+			'customer_id' => $user_id,
+		) );
 
 		$order->add_product( $product, 1 );
 
@@ -312,12 +285,9 @@ function gf_add_membership_purchase_from_form_1( $entry, $form ) {
 
 		$order->update_meta_data( '_gravityforms_entry_id', rgar( $entry, 'id' ) );
 		$order->update_meta_data( '_created_via', 'gravity_forms_membership' );
-
-		$order->add_order_note( 'Auto-created from Gravity Forms entry #' . rgar( $entry, 'id' ) );
+		$order->add_order_note( 'Auto-created after GF user registration for entry #' . rgar( $entry, 'id' ) );
 
 		$order->calculate_totals();
-
-		// Mark as paid/completed so Memberships grants access.
 		$order->payment_complete();
 
 		if ( $order->has_status( array( 'pending', 'on-hold', 'processing' ) ) ) {
@@ -328,7 +298,8 @@ function gf_add_membership_purchase_from_form_1( $entry, $form ) {
 
 		gform_update_meta( rgar( $entry, 'id' ), 'wc_membership_order_id', $order->get_id() );
 
+
 	} catch ( Exception $e ) {
-		error_log( 'GF Membership Purchase: Exception - ' . $e->getMessage() );
+		error_log( 'Error creating WooCommerce order for GF entry ' . rgar( $entry, 'id' ) . ': ' . $e->getMessage() );
 	}
 }
