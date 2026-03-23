@@ -2,8 +2,8 @@
 /**
  * Plugin Name: GF User Meta Prefill
  * Description: Prefills Gravity Forms fields from WordPress user meta for logged-in users.
- * Version: 1.0.0
- * Author: Custom
+ * Version: 1.0.2
+ * Author: Verdian Insights
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -146,8 +146,6 @@ function gfump_user_account_form_shortcode() {
 add_shortcode( 'user_popup_form', 'gfump_user_popup_form_shortcode' );
 function gfump_user_popup_form_shortcode( $atts ) {
 
-	$register_form_id = 2;
-
 	// Only allow update_form_id to be passed in
 	$atts = shortcode_atts(
 		array(
@@ -205,4 +203,132 @@ function custom_login_menu_filter( $items, $args ) {
 	}
 
 	return $items;
+}
+
+add_action( 'gform_after_submission_1', 'gf_add_membership_purchase_from_form_1', 10, 2 );
+
+function gf_add_membership_purchase_from_form_1( $entry, $form ) {
+
+	// Prevent duplicate processing for the same entry.
+	$existing_order_id = gform_get_meta( rgar( $entry, 'id' ), 'wc_membership_order_id' );
+	if ( $existing_order_id ) {
+		return;
+	}
+
+	$product_id = 86966;
+	$product    = wc_get_product( $product_id );
+
+	if ( ! $product ) {
+		error_log( 'GF Membership Purchase: Product 86966 not found.' );
+		return;
+	}
+
+	$email = sanitize_email( rgar( $entry, '1' ) );
+	$phone = sanitize_text_field( rgar( $entry, '9' ) );
+	$company = sanitize_text_field( rgar( $entry, '5' ) );
+	$job_title = sanitize_text_field( rgar( $entry, '6' ) );
+
+	if ( empty( $email ) || ! is_email( $email ) ) {
+		error_log( 'GF Membership Purchase: Invalid email on entry #' . rgar( $entry, 'id' ) );
+		return;
+	}
+
+	// User is already created elsewhere. Find them by email.
+	$user = get_user_by( 'email', $email );
+
+	if ( ! $user ) {
+		error_log( 'GF Membership Purchase: No WP user found for ' . $email );
+		return;
+	}
+
+	$customer_id = $user->ID;
+
+	// Optional: stop if user already has this membership.
+	if ( function_exists( 'wc_memberships_is_user_active_member' ) ) {
+		if ( wc_memberships_is_user_active_member( $customer_id ) ) {
+			return;
+		}
+	}
+
+	// Name field.
+	$first_name = sanitize_text_field( rgar( $entry, '2.3' ) );
+	$last_name  = sanitize_text_field( rgar( $entry, '2.6' ) );
+
+	if ( empty( $first_name ) && empty( $last_name ) ) {
+		$full_name = sanitize_text_field( rgar( $entry, '2' ) );
+		if ( ! empty( $full_name ) ) {
+			$parts = preg_split( '/\s+/', trim( $full_name ), 2 );
+			$first_name = isset( $parts[0] ) ? $parts[0] : '';
+			$last_name  = isset( $parts[1] ) ? $parts[1] : '';
+		}
+	}
+
+	// Address field.
+	$address_1 = sanitize_text_field( rgar( $entry, '7.1' ) );
+	$address_2 = sanitize_text_field( rgar( $entry, '7.2' ) );
+	$city      = sanitize_text_field( rgar( $entry, '7.3' ) );
+	$state     = sanitize_text_field( rgar( $entry, '7.4' ) );
+	$postcode  = sanitize_text_field( rgar( $entry, '7.5' ) );
+	$country   = sanitize_text_field( rgar( $entry, '7.6' ) );
+
+	if ( empty( $address_1 ) ) {
+		$address_1 = sanitize_text_field( rgar( $entry, '7' ) );
+	}
+
+	try {
+		$order = wc_create_order(
+			array(
+				'customer_id' => $customer_id,
+			)
+		);
+
+		if ( is_wp_error( $order ) ) {
+			error_log( 'GF Membership Purchase: Order creation failed - ' . $order->get_error_message() );
+			return;
+		}
+
+		$order->add_product( $product, 1 );
+
+		$billing = array(
+			'first_name' => $first_name,
+			'last_name'  => $last_name,
+			'company'    => $company,
+			'email'      => $email,
+			'phone'      => $phone,
+			'address_1'  => $address_1,
+			'address_2'  => $address_2,
+			'city'       => $city,
+			'state'      => $state,
+			'postcode'   => $postcode,
+			'country'    => $country,
+		);
+
+		$order->set_address( $billing, 'billing' );
+		$order->set_address( $billing, 'shipping' );
+
+		if ( ! empty( $job_title ) ) {
+			$order->update_meta_data( '_job_title', $job_title );
+		}
+
+		$order->update_meta_data( '_gravityforms_entry_id', rgar( $entry, 'id' ) );
+		$order->update_meta_data( '_created_via', 'gravity_forms_membership' );
+
+		$order->add_order_note( 'Auto-created from Gravity Forms entry #' . rgar( $entry, 'id' ) );
+
+		$order->calculate_totals();
+
+		// Mark as paid/completed so Memberships grants access.
+		$order->payment_complete();
+
+		if ( $order->has_status( array( 'pending', 'on-hold', 'processing' ) ) ) {
+			$order->update_status( 'completed', 'Auto-completed free membership order from Gravity Forms.' );
+		}
+
+		$order->save();
+
+		gform_update_meta( rgar( $entry, 'id' ), 'wc_membership_order_id', $order->get_id() );
+
+	} catch ( Exception $e ) {
+		error_log( 'GF Membership Purchase: Exception - ' . $e->getMessage() );
+	}
 }
