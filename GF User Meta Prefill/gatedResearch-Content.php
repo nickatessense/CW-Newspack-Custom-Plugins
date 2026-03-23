@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Gate Keep Research Plugin
+ * Plugin Name: Gated Research Content Plugin
  * Description: Will make sure users are logged in and have to fill out form before they can access the research content. Research Content worked on: E-books, Thought Leadership, and Survery Reports.
  * Version: 1.0.0
  * Author: Verdian Insights
