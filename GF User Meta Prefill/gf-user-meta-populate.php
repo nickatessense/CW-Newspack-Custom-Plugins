@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GF User Meta Prefill
  * Description: Prefills Gravity Forms fields from WordPress user meta for logged-in users.
- * Version: 1.1.6
+ * Version: 1.1.7
  * Author: Verdian Insights
  */
 
@@ -12,7 +12,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 add_filter( 'gform_pre_render', 'gfump_prefill_user_meta' );
 add_filter( 'gform_pre_validation', 'gfump_prefill_user_meta' );
-add_filter( 'gform_admin_pre_render', 'gfump_prefill_user_meta' );
 add_filter( 'gform_pre_submission_filter', 'gfump_prefill_user_meta' );
 
 function gfump_prefill_user_meta( $form ) {
