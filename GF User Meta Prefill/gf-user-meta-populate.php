@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GF User Meta Prefill
  * Description: Prefills Gravity Forms fields from WordPress user meta for logged-in users.
- * Version: 1.1.7
+ * Version: 1.1.12
  * Author: Verdian Insights
  */
 
@@ -159,9 +159,8 @@ function gfump_user_popup_form_shortcode( $atts ) {
 
 	if ( is_user_logged_in() ) {
 		return do_shortcode( '[gravityform id="' . $update_form_id . '" title="true" ajax="true"]' );
-	}
-	else{
-		return '<h2 style="text-align: center;">Please login to your account to register for this webinar. If you do not have an account, please <a href="https://complianceweek.newspackstaging.com/newsletter-registration/" style="text-decoration: underline;">register here</a>.</h2>';
+	} else {
+		return do_shortcode( '[woocommerce_my_account]' );
 	}
 }
 
@@ -302,3 +301,61 @@ function gf_add_membership_purchase_after_user_registered( $user_id, $feed, $ent
 		error_log( 'Error creating WooCommerce order for GF entry ' . rgar( $entry, 'id' ) . ': ' . $e->getMessage() );
 	}
 }
+
+//  Add JS to close any open modals on the page when "Create an Account" is clicked, to prevent multiple overlapping modals when redirecting to the registration page.
+add_action( 'wp_footer', function () {
+	if ( is_user_logged_in() ) {
+		return;
+	}
+	?>
+	<script>
+	(function() {
+		var REGISTER_URL = '/register/';
+
+		document.addEventListener('click', function(e) {
+			var trigger = e.target.closest('a, button');
+			if (!trigger) return;
+
+			var text = (trigger.textContent || '').trim().toLowerCase();
+
+			if (text === 'create an account') {
+				e.preventDefault();
+				e.stopPropagation();
+				e.stopImmediatePropagation();
+
+				// Mark that we came from the auth popup
+				try {
+					sessionStorage.setItem('cw_suppress_auth_popup_back', '1');
+				} catch (err) {}
+
+				window.location.href = REGISTER_URL;
+			}
+		}, true);
+
+		// When browser restores page from back/forward cache, force reload once
+		window.addEventListener('pageshow', function(event) {
+			try {
+				var shouldSuppress = sessionStorage.getItem('cw_suppress_auth_popup_back') === '1';
+
+				if (shouldSuppress && event.persisted) {
+					sessionStorage.removeItem('cw_suppress_auth_popup_back');
+					window.location.reload();
+				}
+			} catch (err) {}
+		});
+
+		// Extra fallback for some browsers/themes
+		window.addEventListener('popstate', function() {
+			try {
+				var shouldSuppress = sessionStorage.getItem('cw_suppress_auth_popup_back') === '1';
+
+				if (shouldSuppress) {
+					sessionStorage.removeItem('cw_suppress_auth_popup_back');
+					window.location.reload();
+				}
+			} catch (err) {}
+		});
+	})();
+	</script>
+	<?php
+});

@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Gated Research Content Plugin
- * Description: Requires WooCommerce login and a Gravity Form submission per browser session to view tagged posts.
- * Version: 1.0.3
+ * Description: Requires WooCommerce login and a Gravity Form submission per browser session to view tagged posts. Also has script for redirecting from "Create an account" in the WooCommerce login modal to a custom GF registration page.
+ * Version: 1.0.7
  * Author: Verdian Insights
  */
 
@@ -16,9 +16,6 @@ class GF_WC_Session_Content_Gate {
         'ebook'              => 'ebook',
         'survey-report'      => 'survey-report',
         'thought-leadership' => 'thought-leadership',
-        'resource'           => 'thought-leadership',
-        'white-paper'        => 'thought-leadership',
-        'white-papers'        => 'thought-leadership',
     );
 
     private $gate_form_map = array(
@@ -72,15 +69,22 @@ class GF_WC_Session_Content_Gate {
 	}
 
 	private function render_login_gate() {
-		ob_start();
-		?>
-		<div class="content-gate content-gate-login">
-			<p>You must log in or register to access this content.</p>
-			<?php echo do_shortcode( '[woocommerce_my_account]' ); ?>
-		</div>
-		<?php
-		return ob_get_clean();
-	}
+        $current_url  = get_permalink();
+        $login_url    = add_query_arg( 'redirect_to', rawurlencode( $current_url ), wc_get_page_permalink( 'myaccount' ) );
+        $register_url = add_query_arg( 'redirect_to', rawurlencode( $current_url ), site_url( '/register/' ) );
+
+        ob_start();
+        ?>
+        <div class="content-gate content-gate-login">
+            <p>You must log in or register to access this content.</p>
+            <p>
+                <a class="button" href="<?php echo esc_url( $login_url ); ?>">Log in</a>
+                <a class="button" href="<?php echo esc_url( $register_url ); ?>">Register</a>
+            </p>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
 
 	private function render_form_gate( $post_id, $gate_type, $form_id ) {
 		$message = '<p>Please complete the form below to access this content.</p>';
@@ -105,13 +109,13 @@ class GF_WC_Session_Content_Gate {
 	}
 
 	private function get_gate_type_for_post( $post_id ) {
-        $post_tags = get_the_terms( $post_id, 'post_tag' );
+        $terms = get_the_terms( $post_id, 'category' );
 
-        if ( empty( $post_tags ) || is_wp_error( $post_tags ) ) {
+        if ( empty( $terms ) || is_wp_error( $terms ) ) {
             return false;
         }
 
-        $slugs = wp_list_pluck( $post_tags, 'slug' );
+        $slugs = wp_list_pluck( $terms, 'slug' );
 
         foreach ( $slugs as $slug ) {
             if ( isset( $this->tag_to_gate_map[ $slug ] ) ) {
@@ -218,3 +222,29 @@ class GF_WC_Session_Content_Gate {
 }
 
 new GF_WC_Session_Content_Gate();
+
+add_action('wp_footer', function () {
+	if ( is_user_logged_in() ) return;
+	?>
+	<script>
+	document.addEventListener('click', function(e) {
+
+		// Look for "Create an account" button/link in the modal
+		let el = e.target;
+
+		if (
+			el &&
+			(
+				el.textContent.trim() === 'Create an account' ||
+				el.closest && el.closest('*')?.textContent?.trim() === 'Create an account'
+			)
+		) {
+			e.preventDefault();
+
+			// Redirect to your GF 2 registration page
+			window.location.href = '/register/';
+		}
+	});
+	</script>
+	<?php
+});
