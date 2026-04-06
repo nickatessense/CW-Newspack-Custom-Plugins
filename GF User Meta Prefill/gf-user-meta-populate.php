@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GF User Meta Prefill
  * Description: Prefills Gravity Forms fields from WordPress user meta for logged-in users.
- * Version: 1.1.12
+ * Version: 1.1.15
  * Author: Verdian Insights
  */
 
@@ -71,23 +71,29 @@ function gfump_prefill_user_meta( $form ) {
 		}
 
 		/*
-		 * Field 7: Address
+		 * Field 7 and 11 and 18: Address
 		 * Typical GF Address inputs:
-		 * 7.1 = Street Address
-		 * 7.2 = Address Line 2
-		 * 7.3 = City
-		 * 7.4 = State / Province
-		 * 7.5 = ZIP / Postal Code
-		 * 7.6 = Country
+		 * x.1 = Street Address
+		 * x.2 = Address Line 2
+		 * x.3 = City
+		 * x.4 = State / Province
+		 * x.5 = ZIP / Postal Code
+		 * x.6 = Country
 		 */
-		if ( intval( $field->id ) === 7 && $field->type === 'address' && ! empty( $field->inputs ) ) {
+		if (
+			in_array( intval( $field->id ), array( 7, 11, 18 ), true ) &&
+			$field->type === 'address' &&
+			! empty( $field->inputs )
+		) {
+			$field_id = intval( $field->id );
+
 			$address_map = array(
-				'7.1' => get_user_meta( $user_id, 'Address', true ),
-				'7.2' => get_user_meta( $user_id, 'Address Line 2', true ),
-				'7.3' => get_user_meta( $user_id, 'City', true ),
-				'7.4' => get_user_meta( $user_id, 'State', true ),
-				'7.5' => get_user_meta( $user_id, 'Zip', true ),
-				'7.6' => get_user_meta( $user_id, 'Country', true ),
+				$field_id . '.1' => get_user_meta( $user_id, 'Address', true ),
+				$field_id . '.2' => get_user_meta( $user_id, 'Address Line 2', true ),
+				$field_id . '.3' => get_user_meta( $user_id, 'City', true ),
+				$field_id . '.4' => get_user_meta( $user_id, 'State', true ),
+				$field_id . '.5' => get_user_meta( $user_id, 'Zip', true ),
+				$field_id . '.6' => get_user_meta( $user_id, 'Country', true ),
 			);
 
 			foreach ( $field->inputs as &$input ) {
@@ -138,9 +144,13 @@ function gfump_user_account_form_shortcode() {
 	$update_form_id = 3; 
 	
 	if ( is_user_logged_in() ) {
-		 return do_shortcode( '[gravityform id="' . $update_form_id . '" title="true" ajax="true"]' ); 
-	} 
-	return do_shortcode( '[gravityform id="' . $register_form_id . '" title="true" ajax="true"]' ); 
+		$title = '<h1>Update Newsletter Preferences</h1>';
+		$form = do_shortcode( '[gravityform id="' . $update_form_id . '" title="false" ajax="true"]' );
+	} else {
+		$title = '<h1>Newsletter Registration</h1>';
+		$form = do_shortcode( '[gravityform id="' . $register_form_id . '" title="false" ajax="true"]' );
+	}
+	return $title . $form;
 }
 // Shortcode to display either the registration or update form based on login status
 add_shortcode( 'user_popup_form', 'gfump_user_popup_form_shortcode' );
@@ -242,15 +252,15 @@ function gf_add_membership_purchase_after_user_registered( $user_id, $feed, $ent
 		}
 	}
 
-	$address_1 = sanitize_text_field( rgar( $entry, '7.1' ) );
-	$address_2 = sanitize_text_field( rgar( $entry, '7.2' ) );
-	$city      = sanitize_text_field( rgar( $entry, '7.3' ) );
-	$state     = sanitize_text_field( rgar( $entry, '7.4' ) );
-	$postcode  = sanitize_text_field( rgar( $entry, '7.5' ) );
-	$country   = sanitize_text_field( rgar( $entry, '7.6' ) );
+	$address_1 = sanitize_text_field( rgar( $entry, '7.1' ) ?: rgar( $entry, '11.1' ) );
+	$address_2 = sanitize_text_field( rgar( $entry, '7.2' ) ?: rgar( $entry, '11.2' ) );
+	$city      = sanitize_text_field( rgar( $entry, '7.3' ) ?: rgar( $entry, '11.3' ) );
+	$state     = sanitize_text_field( rgar( $entry, '7.4' ) ?: rgar( $entry, '11.4' ) );
+	$postcode  = sanitize_text_field( rgar( $entry, '7.5' ) ?: rgar( $entry, '11.5' ) );
+	$country   = sanitize_text_field( rgar( $entry, '7.6' ) ?: rgar( $entry, '11.6' ) );
 
 	if ( empty( $address_1 ) ) {
-		$address_1 = sanitize_text_field( rgar( $entry, '7' ) );
+		$address_1 = sanitize_text_field( rgar( $entry, '7' ) ?: rgar( $entry, '11' ) );
 	}
 
 	try {

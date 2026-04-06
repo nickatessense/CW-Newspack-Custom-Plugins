@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Gated Research Content Plugin
  * Description: Requires WooCommerce login and a Gravity Form submission per browser session to view tagged posts. Also has script for redirecting from "Create an account" in the WooCommerce login modal to a custom GF registration page.
- * Version: 1.0.9
+ * Version: 1.0.23
  * Author: Verdian Insights
  */
 
@@ -52,7 +52,7 @@ class GF_WC_Session_Content_Gate {
 		}
 
 		if ( ! is_user_logged_in() ) {
-			return $this->render_login_gate();
+			return $this->render_login_gate($post_id);
 		}
 
 		if ( $this->is_post_unlocked_for_session( $post_id ) ) {
@@ -68,14 +68,19 @@ class GF_WC_Session_Content_Gate {
 		return $this->render_form_gate( $post_id, $gate_type, $form_id );
 	}
 
-	private function render_login_gate() {
+	private function render_login_gate( $post_id ) {
 		$current_url  = get_permalink();
 		$login_url    = add_query_arg( 'redirect_to', rawurlencode( $current_url ), wc_get_page_permalink( 'myaccount' ) );
 		$register_url = add_query_arg( 'redirect_to', rawurlencode( $current_url ), site_url( '/register/' ) );
+		
+		$excerpt = get_post_field( 'post_excerpt', $post_id );
 
+		$excerpt = strip_shortcodes( $excerpt );
+		$excerpt = wp_kses_post( $excerpt );
 		ob_start();
 		?>
 		<div class="content-gate content-gate-login">
+			<p><?php if ( $excerpt ) : ?><?php echo $excerpt; ?><?php endif; ?></p>
 			<p>You must log in or register to access this content.</p>
 			<p>
 				<a class="button" href="<?php echo esc_url( $login_url ); ?>">Log in</a>
@@ -87,12 +92,24 @@ class GF_WC_Session_Content_Gate {
 	}
 
 	private function render_form_gate( $post_id, $gate_type, $form_id ) {
-		$message = '<p>Please complete the form below to access this content.</p>';
 
-		ob_start();
+		$message = '<p>Please complete the form below to access the full content.</p>';
+	    $excerpt = get_post_field( 'post_excerpt', $post_id );
+
+		$excerpt = strip_shortcodes( $excerpt );
+		$excerpt = wp_kses_post( $excerpt );
+
+		 ob_start();
 		?>
 		<div class="content-gate content-gate-form">
+			<?php if ( ! empty( $excerpt ) ) : ?>
+				<div class="content-gate-excerpt">
+					<?php echo $excerpt; ?>
+				</div>
+			<?php endif; ?>
+
 			<?php echo wp_kses_post( $message ); ?>
+
 			<div class="content-gate-form-wrap">
 				<?php
 				echo do_shortcode(
@@ -190,6 +207,42 @@ class GF_WC_Session_Content_Gate {
 			if ( 'return_url' === $field->inputName ) {
 				$field->defaultValue = esc_url_raw( $return_url );
 			}
+			 if ( 'articleName' === $field->inputName ) {
+				$field->defaultValue = get_the_title( $post_id );
+			}
+
+			if ( 'publishedDate' === $field->inputName ) {
+				$field->defaultValue = get_the_date( 'Y-m-d', $post_id );
+			}
+			if ( 'eventDate' === $field->inputName ) {
+				$raw_event_date = get_post_meta( $post_id, 'event_date', true );
+
+				if ( ! empty( $raw_event_date ) ) {
+					$date = DateTime::createFromFormat( 'Ymd', $raw_event_date );
+
+					if ( $date ) {
+						$field->defaultValue = $date->format( 'm-d-Y' );
+					}
+				}
+			}
+			if ( 'sponsor' === $field->inputName ) {
+				if ( function_exists( '\Newspack_Sponsors\get_all_sponsors' ) ) {
+					$sponsors = \Newspack_Sponsors\get_all_sponsors( $post_id );
+
+					if ( ! empty( $sponsors ) && is_array( $sponsors ) ) {
+						$names = array();
+
+						foreach ( $sponsors as $sponsor ) {
+							if ( ! empty( $sponsor['sponsor_name'] ) ) {
+								$names[] = $sponsor['sponsor_name'];
+							}
+						}
+
+						$field->defaultValue = implode( ', ', array_unique( $names ) );
+					}
+				}
+			}
+
 		}
 
 		return $form;
@@ -224,7 +277,9 @@ class GF_WC_Session_Content_Gate {
 
 new GF_WC_Session_Content_Gate();
 
-add_action( 'wp_footer', function () {
+add_action( 'wp_footer', 'gf_wc_session_content_gate_footer_script' );
+
+function gf_wc_session_content_gate_footer_script() {
 	if ( is_user_logged_in() ) {
 		return;
 	}
@@ -276,4 +331,4 @@ add_action( 'wp_footer', function () {
 	})();
 	</script>
 	<?php
-});
+}
