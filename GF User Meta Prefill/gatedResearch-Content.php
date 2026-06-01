@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: Gated Research Content Plugin
+ * Plugin Name: Gated Research Content
  * Description: Requires WooCommerce login and a Gravity Form submission per browser session to view tagged posts. Also has script for redirecting from "Create an account" in the WooCommerce login modal to a custom GF registration page.
- * Version: 1.0.23
+ * Version: 1.0.30
  * Author: Verdian Insights
  */
 
@@ -13,18 +13,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 class GF_WC_Session_Content_Gate {
 
 	private $tag_to_gate_map = array(
-        'ebook'              => 'ebook',
-        'survey-report'      => 'survey-report',
-        'thought-leadership' => 'thought-leadership',
-		'webcast'           => 'webcast',
-    );
+		'ebook'              => 'ebook',
+		'survey-report'      => 'survey-report',
+		'thought-leadership' => 'thought-leadership',
+	);
 
-    private $gate_form_map = array(
-        'ebook'              => 7,
-        'thought-leadership' => 8,
-        'survey-report'      => 9,
-		'webcast'           => 10,
-    );
+	private $gate_form_map = array(
+		'ebook'              => 7,
+		'thought-leadership' => 8,
+		'survey-report'      => 9,
+	);
 
 	public function __construct() {
 		add_filter( 'the_content', array( $this, 'gate_post_content' ) );
@@ -36,7 +34,6 @@ class GF_WC_Session_Content_Gate {
 		add_filter( 'gform_confirmation_7', array( $this, 'handle_form_confirmation' ), 10, 4 );
 		add_filter( 'gform_confirmation_8', array( $this, 'handle_form_confirmation' ), 10, 4 );
 		add_filter( 'gform_confirmation_9', array( $this, 'handle_form_confirmation' ), 10, 4 );
-		add_filter( 'gform_confirmation_10', array( $this, 'handle_form_confirmation' ), 10, 4 );
 	}
 
 	public function gate_post_content( $content ) {
@@ -52,7 +49,7 @@ class GF_WC_Session_Content_Gate {
 		}
 
 		if ( ! is_user_logged_in() ) {
-			return $this->render_login_gate($post_id);
+			return $this->render_login_gate( $post_id );
 		}
 
 		if ( $this->is_post_unlocked_for_session( $post_id ) ) {
@@ -69,14 +66,15 @@ class GF_WC_Session_Content_Gate {
 	}
 
 	private function render_login_gate( $post_id ) {
-		$current_url  = get_permalink();
-		$login_url    = add_query_arg( 'redirect_to', rawurlencode( $current_url ), wc_get_page_permalink( 'myaccount' ) );
-		$register_url = add_query_arg( 'redirect_to', rawurlencode( $current_url ), site_url( '/register/' ) );
-		
-		$excerpt = get_post_field( 'post_excerpt', $post_id );
+		$current_url = get_permalink( $post_id );
 
+		$login_url    = add_query_arg( 'redirect_to', $current_url, wc_get_page_permalink( 'myaccount' ) );
+		$register_url = add_query_arg( 'redirect_to', $current_url, site_url( '/register/' ) );
+
+		$excerpt = get_post_field( 'post_excerpt', $post_id );
 		$excerpt = strip_shortcodes( $excerpt );
 		$excerpt = wp_kses_post( $excerpt );
+
 		ob_start();
 		?>
 		<div class="content-gate content-gate-login">
@@ -92,14 +90,13 @@ class GF_WC_Session_Content_Gate {
 	}
 
 	private function render_form_gate( $post_id, $gate_type, $form_id ) {
-
 		$message = '<p>Please complete the form below to access the full content.</p>';
-	    $excerpt = get_post_field( 'post_excerpt', $post_id );
+		$excerpt = get_post_field( 'post_excerpt', $post_id );
 
 		$excerpt = strip_shortcodes( $excerpt );
 		$excerpt = wp_kses_post( $excerpt );
 
-		 ob_start();
+		ob_start();
 		?>
 		<div class="content-gate content-gate-form">
 			<?php if ( ! empty( $excerpt ) ) : ?>
@@ -134,7 +131,6 @@ class GF_WC_Session_Content_Gate {
 
 		$slugs = wp_list_pluck( $terms, 'slug' );
 
-		// scheduled-webcast should never be gated, even if webcast is also present.
 		if ( in_array( 'scheduled-webcast', $slugs, true ) ) {
 			return false;
 		}
@@ -185,7 +181,7 @@ class GF_WC_Session_Content_Gate {
 		$post_id   = get_the_ID();
 		$gate_type = $this->get_gate_type_for_post( $post_id );
 
-		if ( ! $post_id || ! $gate_type ) {
+		if ( ! $post_id ) {
 			return $form;
 		}
 
@@ -207,13 +203,15 @@ class GF_WC_Session_Content_Gate {
 			if ( 'return_url' === $field->inputName ) {
 				$field->defaultValue = esc_url_raw( $return_url );
 			}
-			 if ( 'articleName' === $field->inputName ) {
+
+			if ( 'articleName' === $field->inputName ) {
 				$field->defaultValue = get_the_title( $post_id );
 			}
 
 			if ( 'publishedDate' === $field->inputName ) {
 				$field->defaultValue = get_the_date( 'Y-m-d', $post_id );
 			}
+
 			if ( 'eventDate' === $field->inputName ) {
 				$raw_event_date = get_post_meta( $post_id, 'event_date', true );
 
@@ -225,6 +223,7 @@ class GF_WC_Session_Content_Gate {
 					}
 				}
 			}
+
 			if ( 'sponsor' === $field->inputName ) {
 				if ( function_exists( '\Newspack_Sponsors\get_all_sponsors' ) ) {
 					$sponsors = \Newspack_Sponsors\get_all_sponsors( $post_id );
@@ -242,7 +241,6 @@ class GF_WC_Session_Content_Gate {
 					}
 				}
 			}
-
 		}
 
 		return $form;
@@ -292,42 +290,32 @@ function gf_wc_session_content_gate_footer_script() {
 			var trigger = e.target.closest('a, button');
 			if (!trigger) return;
 
-			var text = (trigger.textContent || '').trim().toLowerCase();
-
-			if (text === 'create an account') {
+			if (trigger.href && trigger.href.indexOf('register') !== -1) {
 				e.preventDefault();
 				e.stopPropagation();
 				e.stopImmediatePropagation();
 
-				try {
-					sessionStorage.setItem('cw_suppress_auth_popup_back', '1');
-				} catch (err) {}
-
-				window.location.href = REGISTER_URL;
+				var target = REGISTER_URL + '?redirect_to=' + encodeURIComponent(window.location.href);
+				window.location.href = target;
 			}
 		}, true);
+	})();
+	(function() {
+		function getParam(name) {
+			const url = new URL(window.location.href);
+			return url.searchParams.get(name);
+		}
 
-		window.addEventListener('pageshow', function(event) {
-			try {
-				var shouldSuppress = sessionStorage.getItem('cw_suppress_auth_popup_back') === '1';
+		var redirectTo = getParam('redirect_to');
+		if (!redirectTo) return;
 
-				if (shouldSuppress && event.persisted) {
-					sessionStorage.removeItem('cw_suppress_auth_popup_back');
-					window.location.reload();
-				}
-			} catch (err) {}
+		var link = Array.from(document.querySelectorAll('a')).find(function(a) {
+			return (a.textContent || '').trim().toLowerCase() === 'continue';
 		});
 
-		window.addEventListener('popstate', function() {
-			try {
-				var shouldSuppress = sessionStorage.getItem('cw_suppress_auth_popup_back') === '1';
-
-				if (shouldSuppress) {
-					sessionStorage.removeItem('cw_suppress_auth_popup_back');
-					window.location.reload();
-				}
-			} catch (err) {}
-		});
+		if (link) {
+			link.href = redirectTo;
+		}
 	})();
 	</script>
 	<?php

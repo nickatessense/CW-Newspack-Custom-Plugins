@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GF User Meta Prefill
  * Description: Prefills Gravity Forms fields from WordPress user meta for logged-in users.
- * Version: 1.1.15
+ * Version: 1.1.28
  * Author: Verdian Insights
  */
 
@@ -148,7 +148,7 @@ function gfump_user_account_form_shortcode() {
 		$form = do_shortcode( '[gravityform id="' . $update_form_id . '" title="false" ajax="true"]' );
 	} else {
 		$title = '<h1>Newsletter Registration</h1>';
-		$form = do_shortcode( '[gravityform id="' . $register_form_id . '" title="false" ajax="true"]' );
+		$form = do_shortcode( '[gravityform id="' . $register_form_id . '" title="false" description="true" ajax="true"]' );
 	}
 	return $title . $form;
 }
@@ -188,9 +188,9 @@ function custom_login_menu_filter( $items, $args ) {
 
 	$has_content_access = false;
 
-	// if ( $is_logged_in && function_exists( 'wc_memberships_is_user_active_member' ) ) {
-	// 	$has_content_access = wc_memberships_is_user_active_member( $user_id, 'content-access' );
-	// }
+	if ( $is_logged_in && function_exists( 'wc_memberships_is_user_active_member' ) ) {
+		$has_content_access = wc_memberships_is_user_active_member( $user_id, 'membership' );
+	}
 
 	foreach ( $items as $key => $item ) {
 		$classes = isset( $item->classes ) ? (array) $item->classes : array();
@@ -257,7 +257,7 @@ function gf_add_membership_purchase_after_user_registered( $user_id, $feed, $ent
 	$city      = sanitize_text_field( rgar( $entry, '7.3' ) ?: rgar( $entry, '11.3' ) );
 	$state     = sanitize_text_field( rgar( $entry, '7.4' ) ?: rgar( $entry, '11.4' ) );
 	$postcode  = sanitize_text_field( rgar( $entry, '7.5' ) ?: rgar( $entry, '11.5' ) );
-	$country   = sanitize_text_field( rgar( $entry, '7.6' ) ?: rgar( $entry, '11.6' ) );
+	$country   = sanitize_text_field( rgar( $entry, '14.6' ) );
 
 	if ( empty( $address_1 ) ) {
 		$address_1 = sanitize_text_field( rgar( $entry, '7' ) ?: rgar( $entry, '11' ) );
@@ -369,3 +369,45 @@ add_action( 'wp_footer', function () {
 	</script>
 	<?php
 });
+
+add_filter( 'gform_pre_validation_3', 'gf_set_final_registration_address' );
+add_action( 'gform_pre_submission_3', 'gf_set_final_registration_address' );
+
+add_filter( 'gform_pre_validation_4', 'gf_set_final_registration_address' );
+add_action( 'gform_pre_submission_4', 'gf_set_final_registration_address' );
+
+function gf_set_final_registration_address( $form ) {
+	$form_id = absint( rgar( $form, 'id' ) );
+
+	if ( $form_id === 3 ) {
+		$country_field_id       = 13;
+		$us_address_field_id    = 11;
+		$intl_address_field_id  = 7;
+		$final_address_field_id = 14;
+	} elseif ( $form_id === 4 ) {
+		$country_field_id       = 20;
+		$us_address_field_id    = 18;
+		$intl_address_field_id  = 7;
+		$final_address_field_id = 22;
+	} else {
+		return $form;
+	}
+
+	$country = strtolower( trim( (string) rgpost( 'input_' . $country_field_id . '_6' ) ) );
+
+	$source_field_id = in_array(
+		$country,
+		array( 'united states', 'united states of america', 'us', 'usa' ),
+		true
+	) ? $us_address_field_id : $intl_address_field_id;
+
+	// Copy address parts 1-5 from the selected source field.
+	for ( $i = 1; $i <= 5; $i++ ) {
+		$_POST[ 'input_' . $final_address_field_id . '_' . $i ] = rgpost( 'input_' . $source_field_id . '_' . $i );
+	}
+
+	// Always set country from the dedicated country field.
+	$_POST[ 'input_' . $final_address_field_id . '_6' ] = rgpost( 'input_' . $country_field_id . '_6' );
+
+	return $form;
+}
